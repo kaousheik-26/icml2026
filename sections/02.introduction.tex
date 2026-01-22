@@ -1,0 +1,55 @@
+\section{Introduction}
+
+Large language models (LLMs) are rapidly becoming \emph{agents}: they must act over long horizons, coordinate with other agents, and maintain coherent internal state under partial observability. Yet many of the strongest recent post-training successes for LLMs have been demonstrated in settings that are closer to single-shot reasoning than to long-horizon, multi-agent decision making. In particular, reinforcement learning with verifiable or programmatic rewards (RLVR) has produced large gains in mathematical and algorithmic reasoning, sometimes eliciting qualitatively new behaviors such as extended self-verification and multi-try deliberation \citep{deepseekr1_2025,grpo_style_2025}. At the same time, an active debate has emerged: do RL-style post-training methods \emph{expand capability}, or do they mostly improve \emph{selection}---making models more likely to output, on the first try, solutions that were already present somewhere in the base model's sampling distribution \citep{yue2025does,wu2025limitrlvr}?
+
+This debate has sharpened around \emph{Pass@K}. If RL merely concentrates probability mass on a subset of existing behaviors, we may see large improvements in Pass@1 while seeing little improvement---or even degradation---in Pass@K at large $K$ \citep{yue2025does,wu2025limitrlvr}. Conversely, if RL improves exploration or increases the probability of ``good rare modes'' without collapsing support, it should yield gains at large $K$, and those gains may transfer to \emph{adjacent} tasks. A parallel line of work therefore asks whether we should explicitly optimize Pass@K objectives (rather than Pass@1) in RL, proposing algorithms that treat a batch of samples as the optimization unit to encourage diversity and ``at-least-one-success'' behavior \citep{walder2025pkpo}. Despite this progress, most evidence to date comes from domains like code and math. It remains unclear how these phenomena play out in \emph{long-horizon, partially observable, multi-agent} settings---precisely the regimes that future autonomous systems will occupy.
+
+\paragraph{Hanabi as a controlled multi-agent POMDP setting.}
+In this work, we study these questions in \emph{Hanabi}, a cooperative card game formalized as a multi-agent POMDP \citep{bard2019hanabi}. Hanabi is long-horizon (often $60+$ turns), communication-constrained, and partially observable: each player must infer hidden state (their own hand) from public observations, hints, and teammates' actions. We are \emph{not} trying to argue that ``Hanabi is the best benchmark.'' We use it because it provides a controlled environment where (i) hidden-state inference is unavoidable, (ii) coordination is mandatory, and (iii) long-horizon consistency matters---properties that map directly onto modern LLM-agent challenges.
+
+A growing literature explores LLMs in cooperative games and Hanabi-like settings via prompting, structured reasoning steps (e.g., theory-of-mind style reflection), hybrid scaffolds, or training specialized agents \citep{agashe2023llmcoordination,sudhakar2024generalist,hu2023instructedrl}. However, these efforts typically leave open the core RL questions that now dominate discussion in post-training: whether RL improves more than greedy selection, whether improvements transfer to nearby tasks, how brittle such training is to scaffold changes, and whether learned behaviors can be \emph{composed} modularly rather than monolithically re-trained.
+
+\paragraph{Two complementary supervision signals.}
+Our goal is to use Hanabi to probe RL-for-LLMs along two complementary axes:
+\begin{enumerate}
+    \item \textbf{Belief-state tracking (state updates).} Given a \emph{previous belief state} and the sequence of intervening actions, an agent must update its internal beliefs about the game. This isolates a core POMDP competence: belief-state transition.
+    \item \textbf{Action evaluation (dense move ratings).} Given a set of legal candidate actions, an LLM judge provides dense ratings (a proxy for action-value shaping), which we use for RL training.
+\end{enumerate}
+We train open models using GRPO-style RL (group-relative policy optimization), following the recent trend of scalable on-policy RL methods for reasoning-centric post-training \citep{grpo_style_2025}.
+
+\paragraph{What remains unsolved.}
+Even with the recent explosion in RLVR and agentic prompting, several questions remain unresolved:
+\begin{enumerate}
+    \item \textbf{Capability vs.\ selection.} Are improvements primarily a re-ranking effect (better Pass@1 only), or can RL increase large-$K$ coverage in a way that suggests more robust exploration \citep{yue2025does,wu2025limitrlvr}?
+    \item \textbf{Adjacent-task generalization.} If RL improves exploration, do those gains transfer to nearby tasks that share structure but differ in data source or format?
+    \item \textbf{Scaffold robustness.} LLM-agent systems are prompt- and scaffold-sensitive; does RL training survive reasonable scaffold changes, or does it overfit to surface form?
+    \item \textbf{Modularity and composition.} Can we learn skill units that compose via merging (rather than requiring expensive joint training), and can they transfer across base variants (e.g., instruct $\rightarrow$ thinking)?
+    \item \textbf{Knowledge injection vs.\ policy improvement.} When a scaffold omits key domain rules, can RL inject missing knowledge, or does it mainly exploit knowledge already present in-context?
+\end{enumerate}
+
+\paragraph{Our key findings.}
+We find evidence for a nuanced but actionable picture.
+\textbf{First, RL can yield large gains at high $K$ and transfer them to adjacent tasks.}
+On a held-out belief-update validation set, the base model achieves $11/62$ at Pass@1024, while the RL-trained model reaches $58/62$.
+Moreover, training on Hanabi-derived tracking improves a separate belief-update evaluation to $41/62$ at Pass@1024, and a tracking-only model improves a Hanabi state-tracking validation score from $0.275 \rightarrow 0.374$.
+These results directly engage recent Pass@K skepticism by exhibiting a concrete regime where RL post-training increases large-$K$ success and transfers across data sources \citep{yue2025does,wu2025limitrlvr}.
+
+\textbf{Second, learned skills behave like portable, composable modules.}
+We observe ``LEGO-like'' behavior with LoRA adapters: merging a belief-tracking LoRA trained on an \emph{instruct} base into a \emph{thinking} base improves accuracy from $31/62 \rightarrow 51/62$, suggesting that the learned update mechanism is not tightly coupled to a single base variant \citep{lora_2021,lorahub_2023}.
+
+\textbf{Third, merging complementary specialists yields balanced competence without retraining.}
+A move-ratings specialist and a state-tracking specialist, each trained with its own reward, can be merged to produce a model that performs moderately well on both---typically not surpassing each specialist on its home task, but retaining meaningful competence across both axes. This provides an agentic case study for the broader model merging literature, which has shown that weight-space operations can combine task skills but often face interference \citep{wortsman2022model,ilharco2023task,yao2024ties}.
+
+\textbf{Finally, RL improves policies more reliably than it injects missing knowledge.}
+When training prompts explicitly include Hanabi rules and structure, RL improvements transfer to similarly structured scaffolds; but when a scaffold omits key game knowledge, improvements do not reliably materialize. This isolates a practical limitation: RL can refine behaviors and internal state updates, yet still fail as a mechanism for injecting entirely absent domain knowledge \citep{wu2025limitrlvr}.
+
+\paragraph{Contributions.}
+We summarize our contributions as follows:
+\begin{itemize}
+    \item We provide a controlled multi-agent POMDP study that targets contested RL-for-LLMs questions (capability vs.\ selection, Pass@K behavior, adjacent-task transfer, scaffold robustness, and modular composition) in a long-horizon cooperative environment \citep{bard2019hanabi}.
+    \item We introduce two complementary RL supervision signals---belief-state tracking and LLM-judge move ratings---to disentangle improvements in state updating from improvements in action evaluation.
+    \item We show empirical evidence of large-$K$ and cross-task improvements, including regimes where RL-trained tracking increases Pass@1024 success and transfers across data sources \citep{yue2025does,walder2025pkpo}.
+    \item We demonstrate modularity for RL-trained LoRA skills, including instruct$\rightarrow$thinking transfer and specialist composition via merging, suggesting a practical recipe for building multi-skill agents from reusable components \citep{lora_2021,lorahub_2023}.
+    \item We identify a clear limitation on knowledge injection via scaffold contrasts, separating policy improvement under known rules from learning missing rules, providing a concrete boundary condition for RL-based agent post-training \citep{wu2025limitrlvr}.
+\end{itemize}
+
